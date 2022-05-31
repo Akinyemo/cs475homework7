@@ -11,15 +11,15 @@
 #endif
 #include <omp.h>
 
-#include "CL/cl.h"
-#include "CL/cl_platform.h"
+#include "cl.h"
+#include "cl_platform.h"
 
 
 #ifndef NMB
 #define	NMB			64
 #endif
 
-#define NUM_ELEMENTS		NMB*1024*1024
+#define NUM_ELEMENTS		NMB*NMB
 
 #ifndef LOCAL_SIZE
 #define	LOCAL_SIZE		64
@@ -61,7 +61,7 @@ main( int argc, char *argv[ ] )
 	status = clGetPlatformIDs( 1, &platform, NULL );
 	if( status != CL_SUCCESS )
 		fprintf( stderr, "clGetPlatformIDs failed (2)\n" );
-	
+
 	// get the device id:
 
 	cl_device_id device;
@@ -145,7 +145,7 @@ main( int argc, char *argv[ ] )
 
 	// 8. compile and link the kernel code:
 
-	char *options = { "" };
+	char *options = { (char*)"" };
 	status = clBuildProgram( program, 1, &device, options, NULL, NULL );
 	if( status != CL_SUCCESS )
 	{
@@ -173,7 +173,10 @@ main( int argc, char *argv[ ] )
 	if( status != CL_SUCCESS )
 		fprintf( stderr, "clSetKernelArg failed (2)\n" );
 
-	status = clSetKernelArg( kernel, 2, sizeof(cl_mem), &dC );
+	status = clSetKernelArg( kernel, 2, LOCAL_SIZE * sizeof(float),NULL );
+	if( status != CL_SUCCESS )
+		fprintf( stderr, "clSetKernelArg failed (2)\n" );
+	status = clSetKernelArg( kernel, 3, sizeof(cl_mem),&dC );
 	if( status != CL_SUCCESS )
 		fprintf( stderr, "clSetKernelArg failed (3)\n" );
 
@@ -197,12 +200,19 @@ main( int argc, char *argv[ ] )
 
 	// 12. read the results buffer back from the device to the host:
 
-	status = clEnqueueReadBuffer( cmdQueue, dC, CL_TRUE, 0, dataSize, hC, 0, NULL, NULL );
+	status = clEnqueueReadBuffer( cmdQueue, dC, CL_TRUE, 0, NUM_WORK_GROUPS*sizeof(float), hC, 0, NULL, NULL );
 	if( status != CL_SUCCESS )
 			fprintf( stderr, "clEnqueueReadBuffer failed\n" );
 
+
+
+	Wait( cmdQueue );
+    float sum = 0;
+    for(int i = 0;i<NUM_WORK_GROUPS;i++){
+        sum+= hC[i];
+    }
 	fprintf( stderr, "%8d\t%4d\t%10d\t%10.3lf GigaMultsPerSecond\n",
-		NMB, LOCAL_SIZE, NUM_WORK_GROUPS, (double)NUM_ELEMENTS/(time1-time0)/1000000000. );
+		NMB*NMB, LOCAL_SIZE, NUM_WORK_GROUPS, (double)NUM_ELEMENTS/(time1-time0)/1000000000. );
 
 #ifdef WIN32
 	Sleep( 2000 );
